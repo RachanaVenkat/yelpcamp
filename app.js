@@ -4,6 +4,7 @@ const Campground=require('./models/campground')
 const methodOverride = require('method-override')
 const ejsMate = require('ejs-mate')//engine used to parse ejs
 const catchAsync = require('./utils/catchAsync')
+const ExpressError = require('./utils/ExpressError')
 
 mongoose.connect('mongodb://127.0.0.1:27017/yelp-camp') //here, yelp-camp is the name of the db to access in mongosh
 
@@ -40,6 +41,7 @@ app.get('/campgrounds/new',(req,res)=>{
 //WHEN ITS AFTER THE FINDBYID,IT TREATS "NEW" AS AN ID AND THROWS ERROR SINCE IT DOESN'T EXIST
 
 app.post('/campgrounds',catchAsync(async(req,res,next)=>{
+    if(!req.body.campground) throw new ExpressError('Invalid Campground Data',400)
     const campground = new Campground(req.body.campground)//cuz the parser(urlenconded shit) returns an object in which campground is the key fr the req values
     await campground.save()
     res.redirect(`/campgrounds/${campground._id}`)
@@ -70,8 +72,16 @@ app.delete('/campgrounds/:id', catchAsync(async (req,res)=>{
     res.redirect('/campgrounds')
 }))
 
+//order matters- at the end when the path(/smtg) doesnt exist
+app.all('*',(req,res,next)=>{
+    //res.send("404!!!")
+    next(new ExpressError('Page Not Found',404))
+})
+
 app.use((err,req,res,next)=>{
-    res.send("smtg went wrong")
+    const {statusCode = 500} = err
+    if(!err.message) err.message = 'Something went wrong'
+    res.status(statusCode).render('error',{err})
 })
 
 app.listen(3000, ()=>{
