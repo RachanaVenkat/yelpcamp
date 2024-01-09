@@ -5,7 +5,7 @@
 <div class="row">
     <h1 class="text-center">Add Campground</h1>
     <div class="col-6 offset-3">
-        <form action="/campgrounds" method='POST' novalidate class="validated-form">
+        <form action="/campgrounds" method="POST" novalidate class="validated-form" enctype="multipart/form-data">
             <div class="mb-3">
                 <label class="form-label" for="title">Title</label>
                 <input class="form-control" type="text" id="title" name="campground[title]" required><!--groups all info under req.body under campground obj-->
@@ -21,12 +21,16 @@
                   </div>
             </div>
             <div class="mb-3">
+                <label for="formFileMultiple" class="form-label">Multiple files input example</label>
+                <input class="form-control" type="file" id="formFileMultiple" name="image" multiple>
+              </div>
+            <!-- <div class="mb-3">
                 <label class="form-label" for="image">Image URL</label>
                 <input class="form-control" type="text" id="image" name="campground[image]" required>
                 <div class="valid-feedback">
                     Looks good!
                   </div>
-            </div>
+            </div> -->
             <div class="mb-3">
                 <label class="form-label" for="description">Description</label>
                 <textarea class="form-control" type="text" id="description" name="campground[description]" required></textarea>

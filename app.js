@@ -1,12 +1,29 @@
+if(process.env.NODE_ENV !== "production"){
+    require('dotenv').config()
+}
+
+
 const express = require('express')
 const mongoose = require('mongoose')
 const Joi = require('joi')
-const Campground=require('./models/campground')
 const methodOverride = require('method-override')
 const ejsMate = require('ejs-mate')//engine used to parse ejs
 const catchAsync = require('./utils/catchAsync')
 const ExpressError = require('./utils/ExpressError')
-const {campgroundSchema} = require('./schemas.js')
+const session = require('express-session')
+const flash = require('connect-flash')
+const passport = require('passport')
+const localStrategy = require('passport-local')
+
+const Campground=require('./models/campground')
+const Review = require('./models/reviews')
+const User = require('./models/user')
+
+const {campgroundSchema,reviewSchema} = require('./schemas.js')
+const campgroundRoutes = require('./routes/campgrounds')
+const reviewRoutes = require('./routes/reviews')
+const userRoutes = require('./routes/users')
+
 
 mongoose.connect('mongodb://127.0.0.1:27017/yelp-camp') //here, yelp-camp is the name of the db to access in mongosh
 
@@ -26,65 +43,55 @@ app.set('views',path.join(__dirname,'views'))
 
 app.use(express.urlencoded({extended:true}))//to parse the req-body when the forms is submitted
 app.use(methodOverride('_method'));//to fake put,patch and delete requests
+app.use(express.static(path.join(__dirname,'public')))//to be able to access the public directory; included in boilerplate
 
 
-const validateCampground = (req,res,next) =>{
-    const {error} = campgroundSchema.validate(req.body)
-    if(error){
-        const msg = error.details.map(el => el.message).join(',')
-        throw new ExpressError(msg,400)
-    } else{
-        next()
+const sessionConfig = {
+    secret: 'thisisasecret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+        httpOnly: true,//security
+        expires: Date.now() + 1000*60*60*24*7,//in milliseconds
+        maxAge: 1000*69*60*24*7
     }
 }
+app.use(session(sessionConfig))//needs to be present before passport.sess
+app.use(flash())
 
+app.use(passport.initialize())
+app.use(passport.session())//for persistent login sessions(to avoid loggin in on every req)
+passport.use(new localStrategy(User.authenticate()))//this is a static method in psp-local-mongoose
 
-app.get('/',(req,res)=>{
-    res.render('home')//renders the home.ejs
+passport.serializeUser(User.serializeUser())//storing and retrieving of 
+passport.deserializeUser(User.deserializeUser())//info from sessions
+
+//MIDDLEWARE TO USE FLASH -> NEEDS TO BE DEFINED BEFORE ANY ROUTE HANDLERS
+//GLOBALLY ACCESSIBLE BY ANY TEMPLATE
+app.use((req,res,next)=>{
+    if(!['/login','/'].includes(req.originalUrl)){
+        req.session.retturnTo = req.originalUrl
+    }
+    res.locals.currentUser = req.user
+    res.locals.success = req.flash('success')
+    res.locals.error = req.flash('error')
+    next()
 })
 
-app.get('/campgrounds',catchAsync(async (req,res)=>{
-    const campgrounds = await Campground.find({})
-    res.render('campgrounds/index',{campgrounds})//campgrounds folder in views
-}))
+// app.get('/fakeuser',async(req,res)=>{
+//     const user = new User({email:'jbxdksb', username:'colt'})
+//     const newUser = await User.register(user,'abcd')==>static method by pap-loc-mong
+//     res.send(newUser)     ===> gives automatic salt and hashed psw
+// })
 
-//ORDER MATTERS HERE
-app.get('/campgrounds/new',(req,res)=>{
-    res.render('campgrounds/new')
-})
-//WHEN ITS AFTER THE FINDBYID,IT TREATS "NEW" AS AN ID AND THROWS ERROR SINCE IT DOESN'T EXIST
 
-app.post('/campgrounds',validateCampground, catchAsync(async(req,res,next)=>{
-    //if(!req.body.campground) throw new ExpressError('Invalid Campground Data',400)
-    const campground = new Campground(req.body.campground)//cuz the parser(urlenconded shit) returns an object in which campground is the key fr the req values
-    await campground.save()
-    res.redirect(`/campgrounds/${campground._id}`)
-    
-}))
 
-app.get('/campgrounds/:id',catchAsync(async (req,res)=>{
-    const campground = await Campground.findById(req.params.id)
-    res.render('campgrounds/show',{campground})
+// //******************* */
+app.use('/campgrounds', campgroundRoutes)//path,router
+app.use('/campgrounds/:id/reviews',reviewRoutes)
+app.use('/',userRoutes)
 
-}))
 
-app.get('/campgrounds/:id/edit',catchAsync(async (req,res)=>{
-    const campground = await Campground.findById(req.params.id)
-    res.render('campgrounds/edit',{campground})
-}))
-
-app.put('/campgrounds/:id',validateCampground,catchAsync(async(req,res)=>{
-    const {id} = req.params                          //req.body.campground cuz all are grouped under campground in ejs
-    const campground = await Campground.findByIdAndUpdate(id,{...req.body.campground})//spread expands the iterable
-    res.redirect(`/campgrounds/${campground._id}`)
-
-}))
-
-app.delete('/campgrounds/:id', catchAsync(async (req,res)=>{
-    const {id} = req.params
-    await Campground.findByIdAndDelete(id)
-    res.redirect('/campgrounds')
-}))
 
 //order matters- at the end when the path(/smtg) doesnt exist
 app.all('*',(req,res,next)=>{
